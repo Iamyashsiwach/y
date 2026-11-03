@@ -9,6 +9,8 @@ import anthropic
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from agent.pr import open_pr
+
 MODEL = os.environ.get("FINOPS_MODEL", "claude-opus-5-5")
 MAX_TURNS = 10  # hard cap on tool-use rounds so a confused run can't loop (and bill) forever
 
@@ -51,7 +53,11 @@ async def main() -> None:
     params = StdioServerParameters(command=sys.executable, args=["-m", "mcp_server.server"])
     async with stdio_client(params) as (r, w), ClientSession(r, w) as session:
         await session.initialize()
-        print(await run(anthropic.Anthropic(), session))
+        report = await run(anthropic.Anthropic(), session)
+    print(report)
+    repo, token = os.environ.get("GITHUB_REPO"), os.environ.get("GITHUB_TOKEN")
+    if repo and token:
+        print("PR:", open_pr(repo, report, token))
 
 
 if __name__ == "__main__":

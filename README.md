@@ -1,12 +1,13 @@
 # finops-agent
 
-Autonomous AWS cost agent built on a personal account. Steps 1–3 of 6 are done:
+Autonomous AWS cost agent built on a personal account. Steps 1–4 of 6 are done:
 
 1. `terraform/` – sandbox of deliberately planted waste (idle EC2, orphan EBS volume, orphan Elastic IP).
 2. `mcp_server/` – read-only MCP server exposing waste finders to Claude.
 3. `agent/` – Claude tool-use loop over that server; prints a ranked savings report (capped at 10 turns).
+4. `agent/pr.py` – if `GITHUB_REPO` (owner/name) and `GITHUB_TOKEN` (contents + PR write) are set, opens a PR with the report under `finops-reports/`.
 
-Next: GitHub PR fixes → MongoDB audit log → eval against the planted waste.
+Next: MongoDB audit log → eval against the planted waste.
 
 ## Run
 ```bash
