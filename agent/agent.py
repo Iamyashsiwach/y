@@ -21,7 +21,7 @@ Terraform change (resource to remove or resize). End with the total estimated mo
 You are read-only: propose changes, never claim to have applied them."""
 
 
-async def run(client, session, model: str = MODEL) -> str:
+async def run(client, session, model: str = MODEL, audit=lambda event: None) -> str:
     listed = await session.list_tools()
     tools = [{"name": t.name, "description": t.description or "", "input_schema": t.inputSchema} for t in listed.tools]
     messages = [{"role": "user", "content": "Audit the account for waste and write the ranked report."}]
@@ -31,7 +31,9 @@ async def run(client, session, model: str = MODEL) -> str:
         if resp.stop_reason == "refusal":
             raise RuntimeError(f"model refused: {resp.stop_details}")
         if resp.stop_reason != "tool_use":
-            return "".join(b.text for b in resp.content if b.type == "text")
+            report = "".join(b.text for b in resp.content if b.type == "text")
+            audit({"type": "report", "model": model, "report": report})
+            return report
 
         messages.append({"role": "assistant", "content": resp.content})
         results = []  # all results go back in ONE user message (parallel tool use)
@@ -39,6 +41,7 @@ async def run(client, session, model: str = MODEL) -> str:
             if b.type != "tool_use":
                 continue
             out = await session.call_tool(b.name, b.input)
+            audit({"type": "tool_call", "tool": b.name, "input": b.input, "is_error": bool(out.isError)})
             results.append({
                 "type": "tool_result",
                 "tool_use_id": b.id,
@@ -49,11 +52,24 @@ async def run(client, session, model: str = MODEL) -> str:
     raise RuntimeError(f"no final answer after {MAX_TURNS} turns")
 
 
+def mongo_audit():
+    """Insert every event into MongoDB when MONGODB_URI is set (Atlas M0 is free); else no-op."""
+    uri = os.environ.get("MONGODB_URI")
+    if not uri:
+        return lambda event: None
+    from datetime import datetime, timezone
+
+    from pymongo import MongoClient
+
+    col = MongoClient(uri).finops.audit
+    return lambda event: col.insert_one({**event, "ts": datetime.now(timezone.utc)})
+
+
 async def main() -> None:
     params = StdioServerParameters(command=sys.executable, args=["-m", "mcp_server.server"])
     async with stdio_client(params) as (r, w), ClientSession(r, w) as session:
         await session.initialize()
-        report = await run(anthropic.Anthropic(), session)
+        report = await run(anthropic.Anthropic(), session, audit=mongo_audit())
     print(report)
     repo, token = os.environ.get("GITHUB_REPO"), os.environ.get("GITHUB_TOKEN")
     if repo and token:

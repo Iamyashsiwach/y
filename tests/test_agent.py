@@ -45,3 +45,11 @@ def test_loop_is_capped():
     client = FakeClient([tool_use() for _ in range(MAX_TURNS)])
     with pytest.raises(RuntimeError, match="no final answer"):
         asyncio.run(run(client, FakeSession()))
+
+
+def test_audit_records_tool_call_and_report():
+    events = []
+    final = NS(stop_reason="end_turn", content=[NS(type="text", text="REPORT")])
+    asyncio.run(run(FakeClient([tool_use(), final]), FakeSession(), audit=events.append))
+    assert [e["type"] for e in events] == ["tool_call", "report"]
+    assert events[0]["tool"] == "list_unattached_volumes" and events[1]["report"] == "REPORT"

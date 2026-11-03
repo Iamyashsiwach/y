@@ -42,3 +42,8 @@ resource "aws_eip" "orphan" {
   domain = "vpc"
   tags   = { Name = "waste-orphan-eip" }
 }
+
+# Ground truth for the eval: `terraform output -json planted_ids`
+output "planted_ids" {
+  value = [aws_instance.idle.id, aws_ebs_volume.orphan.id, aws_eip.orphan.allocation_id]
+}
